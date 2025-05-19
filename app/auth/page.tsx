@@ -7,19 +7,22 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
-import axios from "axios"
+// import axios from "axios" // Bu import endi kerak emas
 import { useMutation } from "@tanstack/react-query"
+import axiosInstance from "../../lib/axios" // Bizning axiosInstance
 
 export default function AuthPage() {
   const router = useRouter()
   const [pin, setPin] = useState("")
   const [error, setError] = useState("")
 
-  const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0]
+  // Raqam tugmalarini generatsiya qilish uchun massiv
+  const keypadNumbers = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
   const handleNumberClick = (num: number) => {
     if (pin.length < 4) {
       setPin((prev) => prev + num)
+      setError("") // Xatolikni tozalash
     }
   }
 
@@ -31,15 +34,16 @@ export default function AuthPage() {
   // React Query mutation
   const mutation = useMutation({
     mutationFn: (pinCode: string) =>
-      axios.post("https://oshxonacopy.pythonanywhere.com/api/auth/login/", {
+      // axiosInstance dan foydalanamiz va URL ni qisqartiramiz, chunki baseURL axiosInstance da belgilangan
+      axiosInstance.post("/auth/login/", { // URL: /api/auth/login/ -> /auth/login/
         pin_code: pinCode,
-      }, {
-        headers: {
-          "Content-Type": "application/json",
-        },
       }),
+      // Headers ni bu yerdan olib tashlaymiz, chunki u axiosInstance da global tarzda o'rnatilgan
     onSuccess: (res) => {
-      if (res.status === 200) {
+      // axiosInstance odatda response.data ni to'g'ridan-to'g'ri qaytaradi.
+      // Agar sizning backend res.data.data... kabi javob qaytarsa, shunga moslashtiring.
+      // Hozirgi holatda res.data to'g'ri deb hisoblaymiz.
+      if (res.status === 200 && res.data) {
         localStorage.setItem(
           "user",
           JSON.stringify({
@@ -53,8 +57,8 @@ export default function AuthPage() {
         }
 
         const role = res.data.user.role.name
-        console.log(56, role);
-        
+        console.log("User role:", role); // Konsol log uchun qator raqamini o'zgartirish shart emas
+
         if (role === "Afitsiant") {
           router.push("/pos")
         } else if (role === "chef") {
@@ -69,16 +73,31 @@ export default function AuthPage() {
           setError("Noma'lum rol: " + role)
         }
       } else {
-        setError("Tizimga kirishda xatolik yuz berdi")
+        // Backend dan kelishi mumkin bo'lgan xatolik xabarini olishga harakat
+        setError(res.data?.detail || "Tizimga kirishda xatolik yuz berdi")
       }
     },
-    onError: () => {
-      setError("Noto'g'ri PIN-kod yoki server xatosi")
+    onError: (err: any) => { // Xatolik tipini any deb qoldiramiz, yoki AxiosError import qilish mumkin
+      // axiosInstance interceptorida xatoliklar log qilinadi,
+      // lekin bu yerda UI uchun maxsus xabar berishimiz mumkin.
+      if (err.response && err.response.data && err.response.data.detail) {
+        setError(err.response.data.detail)
+      } else if (err.response && err.response.data && err.response.data.pin_code && Array.isArray(err.response.data.pin_code)) {
+        setError(err.response.data.pin_code.join(" ")) // Misol uchun, agar pin_code xatolari massiv bo'lsa
+      }
+      else {
+        setError("Noto'g'ri PIN-kod yoki server xatosi")
+      }
+      console.error("Login mutation error object:", err) // Xatolikni to'liqroq ko'rish
     }
   })
 
   const handleLogin = () => {
-    setError("")
+    if (pin.length !== 4) {
+        setError("PIN-kod 4 ta raqamdan iborat bo'lishi kerak.")
+        return;
+    }
+    setError("") // Yangi urinishdan oldin xatolikni tozalash
     mutation.mutate(pin)
   }
 
@@ -94,7 +113,8 @@ export default function AuthPage() {
             <User className="h-5 w-5 text-muted-foreground" />
             <div className="flex-1">
               <Label className="text-xs text-muted-foreground">Xodim</Label>
-              <p className="font-medium">Afitsiant</p>
+              {/* Bu yerda foydalanuvchi nomi yoki "Foydalanuvchi" kabi umumiy matn bo'lishi mumkin */}
+              <p className="font-medium">Foydalanuvchi</p>
             </div>
             <Lock className="h-5 w-5 text-muted-foreground" />
           </div>
@@ -108,46 +128,22 @@ export default function AuthPage() {
               maxLength={4}
               placeholder="****"
             />
-            {(error || mutation.isError) && (
-              <p className="text-sm text-destructive mt-1">{error}</p>
+            {(error || (mutation.isError && !mutation.isPending)) && ( // Xatolikni faqat yuklanish tugagandan keyin ko'rsatish
+              <p className="text-sm text-destructive mt-1 text-center">{error}</p>
             )}
           </div>
 
           <div className="grid grid-cols-3 gap-2">
-            {/* First row: 1, 2, 3 */}
-            <Button variant="outline" className="h-14 text-xl font-semibold" onClick={() => handleNumberClick(1)}>
-              1
-            </Button>
-            <Button variant="outline" className="h-14 text-xl font-semibold" onClick={() => handleNumberClick(2)}>
-              2
-            </Button>
-            <Button variant="outline" className="h-14 text-xl font-semibold" onClick={() => handleNumberClick(3)}>
-              3
-            </Button>
-
-            {/* Second row: 4, 5, 6 */}
-            <Button variant="outline" className="h-14 text-xl font-semibold" onClick={() => handleNumberClick(4)}>
-              4
-            </Button>
-            <Button variant="outline" className="h-14 text-xl font-semibold" onClick={() => handleNumberClick(5)}>
-              5
-            </Button>
-            <Button variant="outline" className="h-14 text-xl font-semibold" onClick={() => handleNumberClick(6)}>
-              6
-            </Button>
-
-            {/* Third row: 7, 8, 9 */}
-            <Button variant="outline" className="h-14 text-xl font-semibold" onClick={() => handleNumberClick(7)}>
-              7
-            </Button>
-            <Button variant="outline" className="h-14 text-xl font-semibold" onClick={() => handleNumberClick(8)}>
-              8
-            </Button>
-            <Button variant="outline" className="h-14 text-xl font-semibold" onClick={() => handleNumberClick(9)}>
-              9
-            </Button>
-
-            {/* Fourth row: Clear, 0, Login */}
+            {keypadNumbers.map((num) => (
+              <Button
+                key={num}
+                variant="outline"
+                className="h-14 text-xl font-semibold"
+                onClick={() => handleNumberClick(num)}
+              >
+                {num}
+              </Button>
+            ))}
             <Button variant="outline" className="h-14 text-xl font-semibold" onClick={handleClear}>
               Tozalash
             </Button>
@@ -156,7 +152,7 @@ export default function AuthPage() {
             </Button>
             <Button
               variant="default"
-              className="h-14 text-xl font-semibold bg-primary w-full"
+              className="h-14 text-xl font-semibold bg-primary" // w-full olib tashlanishi mumkin, chunki grid elementi
               onClick={handleLogin}
               disabled={pin.length !== 4 || mutation.isPending}
             >
@@ -164,39 +160,28 @@ export default function AuthPage() {
             </Button>
           </div>
         </CardContent>
-        <CardFooter className="flex flex-col space-y-2">
+        <CardFooter className="flex flex-col space-y-2 pt-4"> {/* pt-4 qo'shildi */}
           <p className="text-xs text-center text-muted-foreground">
             Agar PIN-kodni unutgan bo'lsangiz, administrator bilan bog'laning
           </p>
 
           {/* Sample PIN codes for testing */}
-          <div className="border-t pt-2 mt-2">
+          <div className="border-t pt-2 mt-2 w-full">
             <p className="text-xs text-center font-medium mb-1">Namuna PIN kodlar (test uchun):</p>
-            <div className="grid grid-cols-3 gap-2 text-xs text-center">
+            <div className="grid grid-cols-2 gap-2 text-xs text-center"> {/* Namunalarga moslab grid-cols-2 */}
               <div className="border rounded p-1">
                 <p className="font-medium">Afitsiant</p>
                 <p className="text-primary">1234</p>
               </div>
-              {/* <div className="border rounded p-1">
-                <p className="font-medium">Oshpaz</p>
-                <p className="text-primary">5678</p>
-              </div> */}
-              {/* <div className="border rounded p-1">
-                <p className="font-medium">Kassir</p>
-                <p className="text-primary">9012</p>
-              </div> */}
+              {/* Siz kommentga olgan kodlar shu yerda edi */}
               <div className="border rounded p-1">
                 <p className="font-medium">Administrator</p>
                 <p className="text-primary">2006</p>
               </div>
-              {/* <div className="border rounded p-1">
-                <p className="font-medium">Yetkazuvchi</p>
-                <p className="text-primary">7890</p>
-              </div> */}
             </div>
           </div>
         </CardFooter>
-          <h3 className="font-medium text-center text-zinc-400">© 2025 <a href="https://t.me/O_Omadbek">CDC Group.</a> Barcha huquqlar himoyalangan.</h3>
+          <h3 className="font-medium text-center text-zinc-400 pb-4">© 2025 <a href="https://t.me/O_Omadbek" className="hover:underline">CDC Group.</a> Barcha huquqlar himoyalangan.</h3>
       </Card>
     </div>
   )
